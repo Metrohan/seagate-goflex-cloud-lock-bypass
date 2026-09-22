@@ -2,9 +2,10 @@
 
 Bu depo, Seagate'in bulut servisini (seagateshare.com) 2018/2019'da kapatması nedeniyle
 "kilitli" kalmış bir Seagate GoFlex Home NAS cihazını kurtarma sürecinin notlarıdır.
-Cihaz, sahibi (Aytaç hoca) tarafından şifresi hatırlanmayan ve Seagate desteğinin
-sonlandırılmış olduğu bir durumda elimize ulaştı. Tüm işlemler kendi donanımımız
-üzerinde, izole bir noktadan-noktaya Ethernet bağlantısıyla yapıldı.
+Cihaz, sahibi tarafından şifresi hatırlanmayan ve Seagate desteğinin
+sonlandırılmış olduğu bir durumda elimize ulaştı. Tüm işlemler cihazın gerçek
+sahibinin izniyle, kendi donanımımız üzerinde, izole bir noktadan-noktaya
+Ethernet bağlantısıyla yapıldı.
 
 **Durum:** Kısmen başarılı. Cihaz reflash edilerek dosya paylaşımı (FTP/SMB) erişimi
 geri kazanıldı. Web arayüzü/SSH erişimi ve bulut kaydı simülasyonu kısmen ilerletildi
