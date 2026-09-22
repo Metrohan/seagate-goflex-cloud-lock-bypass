@@ -1,0 +1,30 @@
+# GoFlex Home (Axentra HipServ) cihazlarına DHCP + DNS servisi vermek için
+# örnek dnsmasq yapılandırması. <IFACE> yerine cihaza bağlı ağ arayüzünüzü
+# (örn. enp0s13f0u3u4) yazın, gerekirse IP aralığını kendi ortamınıza göre
+# değiştirin.
+#
+# Kullanım: dnsmasq -C dnsmasq_goflex.conf --no-daemon
+# (Bu arayüzde önce statik bir IP - burada 192.168.50.1/24 - atanmış olmalı,
+#  ve NetworkManager gibi araçlar bu arayüzü yönetmemeli.)
+
+interface=<IFACE>
+bind-interfaces
+except-interface=lo
+
+# DHCP: cihaza IP + gateway + DNS olarak kendimizi verelim
+dhcp-range=192.168.50.50,192.168.50.100,255.255.255.0,12h
+dhcp-option=option:router,192.168.50.1
+dhcp-option=option:dns-server,192.168.50.1
+dhcp-authoritative
+dhcp-leasefile=./dnsmasq.leases
+pid-file=./dnsmasq.pid
+
+# DNS: seagateshare ve hipserv alan adlarını kendimize yönlendir
+address=/seagateshare.com/192.168.50.1
+address=/hipserv.com/192.168.50.1
+address=/axentra.com/192.168.50.1
+
+# Tüm DNS sorgularını logla (görünürlük için)
+log-queries
+log-dhcp
+log-facility=./dnsmasq.log
