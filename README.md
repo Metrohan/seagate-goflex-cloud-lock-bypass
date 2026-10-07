@@ -1,229 +1,88 @@
-# Seagate GoFlex Home Recovery — Field Notes
+# Seagate GoFlex Home Recovery How-To
 
-Bu depo, Seagate'in bulut servisini (seagateshare.com) 2018/2019'da kapatması nedeniyle
-"kilitli" kalmış bir Seagate GoFlex Home NAS cihazını kurtarma sürecinin notlarıdır.
-Cihaz, sahibi tarafından şifresi hatırlanmayan ve Seagate desteğinin
-sonlandırılmış olduğu bir durumda elimize ulaştı. Tüm işlemler cihazın gerçek
-sahibinin izniyle, kendi donanımımız üzerinde, izole bir noktadan-noktaya
-Ethernet bağlantısıyla yapıldı.
+This guide documents a recovery path for a Seagate GoFlex Home running Axentra HipServ after Seagate discontinued the `seagateshare.com` service. It is based on work on an authorized device connected to an isolated lab network. Hardware, firmware, and current device state can differ; adapt and verify every step before use.
 
-**Son durum (2026-10-02):** Cihaz üzerinde salt okunur yönetim arayüzü yetenek incelemesi
-**NO-GO** ile durduruldu. Eski HTTPS yığını güncel istemcilerle uyumlu değil; bağımsız
-kimlik doğrulama, yeniden başlatma sonrası uygulama depolaması ve web sürecine verilebilecek
-dar yetkili işlem yolu kanıtlanmadı. Cihaza bu incelemede dosya, hesap, paylaşım, servis veya
-ayar yazılmadı. Karar, bakımı yapılan TLS özellikli bir sunucu sağlanana kadar standart SMB
-kullanımına devam etmek. Ayrıntı ve kanıt: [2026-10-02 yetenek kapısı](docs/superpowers/evidence/2026-10-02-goflex-ui-capability-gate.md).
+## Current project status
 
-Daha önce cihaz yeniden flaşlanarak FTP/SMB dosya erişimi geri kazanıldı. Eski bulut kaydını
-taklit etme ve yönetim arayüzü çalışmaları tamamlanmış özellikler değildir. Cihazın bugünkü
-canlı durumu bu depodaki kayıtlarla doğrulanmış sayılmaz.
+**Last documented capability review: 2026-10-02.** A read-only assessment of an on-device management UI ended **NO-GO**. The device's HTTPS stack is obsolete, independent authentication was not established, app storage persistence across reboot was unproven, and no narrow privilege boundary for account/share changes was verified. The review changed no files, accounts, shares, services, or settings on the NAS. Use ordinary SMB access for now; do not expose the legacy web UI as a management interface.
 
----
+Earlier observations confirmed FTP/SMB access after recovery, but visible shares appeared empty even though the disk showed about 1.46 TB in use. That does not prove the old data is gone or accessible. The device's present live state has not been rechecked by this repository.
 
-## 1. Başlangıç durumu
+## Safety and scope
 
-- Cihaz: Seagate GoFlex Home (board: `EHDUL4 7D28UL44001R1 REV.01`), Marvell Kirkwood
-  (ARM926EJ-S) SoC, Axentra HipServ OS üzerinde çalışıyor.
-- Sorun: Web arayüzü girişte `seagateshare.com`'a yönlendiriyor, bu servis artık yok.
-  Kurulum sihirbazı "cannot reach seagateshare.com" hatasıyla takılı kalıyor.
-- Admin şifresi bilinmiyor, SSH/web erişimi yok.
-- Hedef: Önce dosyalara erişim, sonra mümkünse cihazı genel amaçlı bir Linux
-  sunucusuna (lab server) çevirmek.
+- Work only on a device and network you own or are authorized to administer.
+- Use a direct, isolated Ethernet link. Do not attach this legacy device to a shared or internet-facing network during recovery.
+- Do not factory-reset, repartition, format, or reflash a disk that may contain the only copy of important data.
+- Firmware reflash changes the NAS firmware and can leave the device unbootable. Verify the exact board and firmware package, preserve a separate data backup where possible, and stop if the package or recovery mode is uncertain.
+- The community firmware referenced below is third-party and is not included in this repository. Verify its provenance and integrity yourself before use.
+- SMB1 and the device's default credentials are unsafe on untrusted networks. Keep any legacy protocol use isolated and never publish passwords, tokens, private keys, or raw device configuration.
+- Do not treat an LED, a successful TLS handshake, a synthetic HTTP response, or a large disk-usage number as proof that old files are recoverable.
 
-## 2. İlk teşhis
+## 1. Prepare an isolated connection
 
-`nmap`/`curl`/`smbclient`/`ftp` ile port taraması: HTTP(80/443), SSH(22), FTP(21),
-SMB(139/445) açık. SSH banner: `OpenSSH_4.3-HipServ`. HTTP `X-Axentra-Version: 10.2.0`
-başlığı ve `Location: https://www.seagateshare.com/?hipname=...` yönlendirmesi
-cihazı ve sorunu doğruladı.
+Connect the NAS directly to a dedicated Ethernet interface on a Linux workstation. Disconnect that interface from NetworkManager or other network management only if you understand how to restore it afterward. Choose an address range that does not overlap another network, then identify the NAS address from DHCP leases or the device's network settings.
 
-## 3. Reflash — üç deneme, bir kritik eksik adım
+Inspect only the isolated link. For example:
 
-Topluluk tarafından belgelenmiş bir USB kurtarma mekanizması var: cihaz kapalıyken
-reset pinine basılı tutup güç verilince, bootloader FAT32 bir USB bellekten
-firmware arıyor.
-
-Kullanılan dosya: `hipserv2_seagateplug_2.72_admin.zip` — **üçüncü parti**, orijinal
-kaynağı [goflexhome.blogspot.com yazısı](http://goflexhome.blogspot.com/2019/01/firmware-reflash-without-seagateshare.html).
-Yazarın notuna göre bu, orijinal Seagate stok firmware'inin küçük bir değişiklikle
-(varsayılan bir `admin` hesabı önceden oluşturulmuş) yeniden paketlenmiş hali —
-Seagateshare'e ihtiyaç duymadan ilk kurulumu atlamak için. **Bu depo bu dosyayı
-içermez** — lisansı/sahipliği belirsiz olduğu için yeniden dağıtmıyoruz, sadece
-kaynağını gösteriyoruz.
-
-Dosya bütünlüğü indirmeden sonra doğrulandı: `file` ile her bileşenin
-(`initrd`, `uImage`, `.ubi`) gerçek/geçerli u-boot/UBI formatında olduğu ve
-CRC'lerinin bozulmadığı teyit edildi.
-
-**İlk 3 reflash denemesi başarısız oldu** — cihaz sonsuz bir "açılış aşamasında"
-LED durumunda kaldı, ağa hiç çıkmadı. Sebebi ancak
-[BeyondLogic wiki'sindeki gerçek bir boot log'unu](https://web.archive.org/web/2020id_/https://wiki.beyondlogic.org/index.php/Seagate_FreeAgent_GoFlex_Home_Firmare_Recovery)
-okuyunca anlaşıldı:
-
-> "The hard disk should be removed from the dock, otherwise the hard disk may
-> come up as /dev/sda rather than the USB stick and prevent the \*.ubi file
-> being found."
-
-Kurtarma ortamı `/dev/sda1`'i USB bellek sanıp bağlıyor — eğer dahili disk takılıysa
-o `/dev/sda` olarak öne geçiyor ve gerçek USB bellek hiç bulunamıyor, `.ubi` dosyası
-flaşlanmıyor. **Bu adımı atlamak 3 denemenin de sessizce hiçbir şey yapmamasına
-neden olmuştu.**
-
-**Düzeltilmiş prosedür:**
-1. Cihazı kapat, dahili SATA diski dock'tan çıkar.
-2. Hazırlanan USB belleği tak, reset pini + power ile kurtarma moduna gir.
-3. ~3-5 dakika bekle (iki aşamalı süreç: önce u-boot `uImage`+`initrd`'yi NAND'a
-   yazıyor, sonra o kernel içindeki kurtarma ortamı asıl `.ubi` dosya sistemini
-   flaşlıyor).
-4. Diski geri tak, normal aç.
-
-Bu düzeltmeyle **4. deneme başarılı oldu**: sabit yeşil LED (= "ağ bağlantısı
-normal", resmi [Seagate LED tablosu](https://www.seagate.com/support/kb/goflex-home-led-functionality-3205en/)),
-`admin`/`admin1` ile FTP ve SMB erişimi doğrulandı.
-
-## 4. Reflash sonrası doğrulanmış durum (önceki gözlem)
-
-- ✅ Önceki gözlemde cihaz ağda erişilebilir ve stabil durumdaydı; bu kayıt güncel canlılık kontrolü değildir.
-- ✅ `admin` / `admin1` ile FTP ve SMB üzerinden dosya erişimi çalışıyor.
-- ✅ Dahili disk mount olmuş, tüm orijinal paylaşımlar (Personal/Backup/Public/
-  External) SMB üzerinden listeleniyor.
-- ⚠️ SMB'de görünür paylaşımların çoğu (Personal, Backup/TimeMachineBackup) **boş**
-  görünüyor — ama `smbclient ... du` ile disk kullanımı kontrol edildiğinde diskte
-  **~1.46 TB kullanılmış alan** olduğu görüldü. Yani eski kullanıcı verileri
-  muhtemelen diskte duruyor, sadece reflash'ın oluşturduğu yeni `admin` hesabının
-  klasör görünümüne bağlı değil (eski hesap veritabanı sıfırlanmış olabilir).
-  Bu veriye erişmek için muhtemelen root/shell erişimi (bkz. §6) gerekiyor.
-- ❌ SSH parola ile çalışmıyor: `admin` kullanıcısı için SSH tamamen reddediliyor,
-  `root` için `password` auth yöntemi sunuluyor ama denenen aday şifrelerin
-  (`root`, `admin1`, `toor`, `stxadmin`, boş, vb.) hiçbiri çalışmadı.
-
-## 5. Web arayüzü / Flash bypass girişimi
-
-Web arayüzü eski (2010-2012) bir Adobe Flash istemcisi kullanıyor — modern
-tarayıcılarda Flash Player yok (2021'de kaldırıldı).
-
-**Bulgu 1 — Flash'sız düz HTML giriş yolu:** `http://<ip>/?local=1` isteği,
-buluta değil `/homebase/signin` gibi düz HTML sayfalarına yönlendiriyor. Bu ipucu
-[openstora GitHub projesinden](https://github.com/Dees7/openstora) (ilişkili bir
-Axentra HipServ cihazı olan Netgear Stora için belgelenmiş) geldi.
-
-**Bulgu 2 — Kurulum sihirbazını atlatma:** Sihirbaz "Registration: cannot reach
-seagateshare.com" adımında (sayfa 2/6) takılı kalıyor. Formdaki gizli
-`wizardpageno` alanını doğrudan manipüle ederek (`wizardpageno=3` göndererek)
-kayıt adımı tamamen atlanıp sonraki sayfaya (4/6, Software Update) geçilebiliyor.
-Sihirbazın geri kalanı (5/6 bildirim ayarları, 6/6 "Congratulations!") normal
-şekilde ilerletilebildi — **ama** "Finish" butonu aslında sadece sihirbaza geri
-dönüyor ("Return to Setup"), kalıcı bir "kurulum tamamlandı" bayrağı set etmiyor;
-bu bayrak yalnızca gerçek bir bulut kaydıyla set ediliyor gibi görünüyor.
-
-**Bulgu 3 — Gizli REST API:** Flash istemcisinin (`MainStage.swf`, sıkıştırılmış
-Flash dosyası, `zlib` ile açılıp `strings` ile incelendi) arkasında düz bir
-`/api/2.0/rest/...` XML REST API'si var (`accounts/users`, `server/config` vb.).
-Oturum çerezi ile doğrudan `curl` üzerinden GET/PUT çağrılabiliyor — ama şifre
-değiştirme gibi yazma işlemleri için doğru XML alan adlarını (SWF string'lerinde
-`<user email="" oldpass="" password=""/>` şablonu bulundu) bulmamıza rağmen
-sunucu tutarlı şekilde `code 5 Invalid Parameter` / `code 4 I/O Error` döndürdü —
-tam olarak çözülemedi.
-
-## 6. "Sahte bulut sunucusu" (MITM) girişimi — kısmi başarı
-
-Fikir: cihazın `seagateshare.com`'a erişim denemesini yakalayıp kendi sahte
-sunucumuzla yanıtlamak, böylece kayıt adımının gerçekten "başarılı" görünmesini
-sağlamak.
-
-### 6.1 Altyapı
-
-- Ana makinede statik IP (`192.168.50.1/24`), `NetworkManager` bu arayüzden çekildi.
-- `dnsmasq`: hem DHCP sunucusu (cihaza gateway+DNS olarak kendimizi veriyor) hem
-  DNS sunucusu (`*.seagateshare.com` → kendi IP'miz) olarak kullanıldı.
-- `iptables` PREROUTING NAT: sadece cihazın arayüzünden (belirli bir interface)
-  gelen 80/443 trafiğini yerel bir yakalayıcı porta yönlendiriyor. **Not:**
-  Docker'ın kendi `DOCKER` NAT zinciri PREROUTING'in başında olduğu için,
-  kurallarımızı `-I ... 1` ile zincirin en başına eklemek gerekti, yoksa Docker
-  paketleri önce yakalıyordu.
-
-### 6.2 Cihaz gerçekten bize geliyor
-
-DHCP ile cihaza IP verildikten sonra `dnsmasq` loglarında cihazın aktif olarak
-şu adresleri sorguladığı görüldü: `cpestatus.seagateshare.com`,
-`reg.seagateshare.com`, `axentraserver.<hipname>.seagateshare.com`,
-`update.seagateshare.com`. `iptables` sayaçları cihazın gerçekten TCP/443
-bağlantı denemesi yaptığını doğruladı.
-
-### 6.3 Engel: cihaz SSLv2-uyumlu bir TLS ClientHello gönderiyor
-
-Python'un `ssl` modülüyle (modern OpenSSL 3.6.4) kurulan bir yakalayıcıya gelen
-bağlantı `fatal alert: protocol_version` ile reddedildi. `tcpdump -X` ile ham
-byte'lar incelendiğinde istemcinin `80 7c 01 03 01 ...` ile başlayan, klasik
-**SSLv2 kayıt çerçevesi** kullandığı görüldü (içeriği TLS 1.0 istiyor — bu,
-dönemin TLS istemcilerinde yaygın bir geriye-uyumluluk pratiğiydi). SSLv2
-desteği güvenlik nedeniyle OpenSSL 1.1.0'dan (2016) itibaren tamamen kaldırıldı,
-bu yüzden modern hiçbir sistem bunu konuşamıyor.
-
-### 6.4 Çözüm: izole, eski bir OpenSSL container'ı
-
-Ana sistemi hiç değiştirmeden, Docker ile eski bir Debian 8 (Jessie, EOL) imajı
-içinde `OpenSSL 1.0.1t` kurulup kendi self-signed sertifikamızla `openssl
-s_server` çalıştırıldı (`--network host`, apt kaynakları `archive.debian.org`'a
-yönlendirildi çünkü Jessie ana mirror'lardan kaldırılmış).
-
-**Bu çalıştı:** `s_server`, SSLv2-uyumlu ClientHello'yu doğru ayrıştırıp normal
-bir TLS 1.0 ServerHello + sertifika zinciri gönderdi, cihaz da tam el sıkışmayı
-tamamladı (ChangeCipherSpec + Finished), ardından **176 byte'lık şifreli bir HTTP
-isteği gönderdi** ve sunucumuzun (varsayılan `-www` modu) yanıtını aldı (4506 byte).
-
-**Tam olarak tamamlanamayan kısım:** Cihazın gönderdiği HTTP isteğinin gerçek
-(şifresi çözülmüş) içeriğini yakalayıp, ona Axentra'nın gerçek kayıt API'sinin
-beklediği yanıtı üretecek şekilde cevap vermeyi denedik. Bunun için `s_server`'ı
-"düz mod"da (istekleri ekrana basan) tekrar başlattık, ama bu eski binary/Docker
-kombinasyonu kararsız çıktı — dış bağlantı olmadan da kendi kendine sürekli
-başlayıp kapanıyordu (sebebi netleştirilemedi: muhtemelen container içindeki çok
-eski, statik bağlı OpenSSL binary'sinin container ortamında entropy/kaynak
-sorunu). Zaman/emek dengesini gözeterek bu noktada durduk.
-
-**Sonuç:** TLS/protokol uyumluluğu sorunu **kesin olarak çözüldü ve kanıtlandı**.
-Gerçek Axentra kayıt API'sini tam olarak taklit etmek (böylece kurulum
-sihirbazının "registered" bayrağını kalıcı olarak set etmesini sağlamak) ayrı,
-daha büyük bir reverse-engineering çalışması gerektiriyor ve tamamlanmadı.
-
-## 7. Kaynaklar ve provenance
-
-Bu çalışma sırasında danışılan/kullanılan üçüncü parti kaynaklar:
-
-| Kaynak | Ne için kullanıldı |
-|---|---|
-| [Seagate: GoFlex Home LED functionality](https://www.seagate.com/support/kb/goflex-home-led-functionality-3205en/) | Resmi LED renk kodları |
-| [Seagate: Discontinuation of Remote Access](https://www.seagate.com/support/kb/what-to-know-about-goflex-home-and-the-discontinuation-of-remote-access-007867en/) | Factory reset'in neden tehlikeli olduğu |
-| [goflexhome.blogspot.com — Firmware reflash without Seagateshare](http://goflexhome.blogspot.com/2019/01/firmware-reflash-without-seagateshare.html) | Kullanılan reflash paketinin kaynağı (üçüncü parti, dağıtılmıyor) |
-| [BeyondLogic wiki (Wayback arşivi)](https://web.archive.org/web/2020id_/https://wiki.beyondlogic.org/index.php/Seagate_FreeAgent_GoFlex_Home_Firmare_Recovery) | Kritik "diski çıkar" bulgusu, gerçek boot log |
-| [Doozan forum](https://forum.doozan.com/) | Reflash/kurtarma yöntemleri, u-boot kaynakları |
-| [ArchLinuxARM forumu](https://archlinuxarm.org/forum/) | Root erişimi, header pinout tartışmaları |
-| [judepereira.com — UART serial console](https://judepereira.com/blog/hacking-your-goflex-home-2-uart-serial-console/) | UART pin haritası (kullanılmadı, referans) |
-| [wiki.scottn.us](http://wiki.scottn.us/doku.php?id=goflex:start) | Seri konsol + Debian kurulum notları (Public Domain), kullanılmadı |
-| [CyanLabs — Recovering a Seagate GoFlex via serial](https://cyanlabs.net/tutorials/recovering-a-seagate-goflex-via-serial/) | Kasa açma + UART referansı, kullanılmadı |
-| [GitHub: Dees7/openstora](https://github.com/Dees7/openstora) | `?local=1` bypass ipucu |
-| [Ruffle (ruffle-rs/ruffle)](https://ruffle.rs/) | Flash emülatörü denemesi (Apache-2.0/MIT), tarayıcı erişim sorunuyla tamamlanamadı |
-
-**Üçüncü parti firmware dosyası (`hipserv2_seagateplug_2.72_admin.zip`) bu depoya
-dahil edilmemiştir** — kaynağı yukarıda belirtilen blog yazısı, lisansı/sahipliği
-belirsiz (muhtemelen Seagate'in orijinal, telif hakkı korumalı firmware'inin
-değiştirilmiş bir kopyası). İsteyen, kaynak bağlantısından kendisi temin
-edebilir.
-
-Bu depodaki kod (Python yakalayıcı, dnsmasq config) tarafımızca bu görev için
-yazılmıştır.
-
-## 8. İçindekiler
-
-```
-scripts/
-  catcher.py           — HTTP/HTTPS istek yakalayıcı (Python, MITM aşaması için)
-  dnsmasq_goflex.conf  — DHCP+DNS yapılandırması (örnek, IP'ler bu kuruluma özel)
+```sh
+nmap -Pn -p 21,22,80,443,139,445 "$NAS_IP"
 ```
 
-## 9. Sorumluluk reddi
+`$NAS_IP` is a placeholder for the address assigned to your device. Do not scan networks you do not own or administer.
 
-Bu notlar, **kendi sahip olduğumuz/yetkili olduğumuz bir cihaz** üzerinde,
-izole bir laboratuvar ağında yapılan meşru bir veri kurtarma/yeniden kullanım
-çalışmasını belgeler. Burada anlatılan teknikler (özellikle §6) başka birinin
-cihazına veya ağına izinsiz erişim için kullanılmamalıdır.
+## 2. Check SMB shares and copy accessible files
+
+Install or use a Samba client on the workstation. Older GoFlex firmware may require SMB1; enable that compatibility only for this isolated connection. The client prompts for the password, so it does not need to appear in shell history.
+
+List the shares:
+
+```sh
+smbclient -L "//$NAS_IP" -U "$NAS_LOGIN" --option='client min protocol=NT1'
+```
+
+Connect to a share and inspect its contents:
+
+```sh
+smbclient "//$NAS_IP/Personal" -U "$NAS_LOGIN" --option='client min protocol=NT1'
+```
+
+At the `smb: \>` prompt, use `ls` to list entries and `get <remote-file>` to copy one file to the workstation's current directory. Repeat for each available share. Store recovered files on a separate disk and verify the copies before changing firmware or storage.
+
+A share that lists as empty does not establish that the physical disk is empty. Previous checks found about 1.46 TB in use while several visible shares looked empty. Avoid formatting or repartitioning the disk while data recovery remains the goal.
+
+## 3. Reflash only if the device is still locked
+
+This procedure was used to restore network and file-share access. Skip it if your device is already accessible or if you cannot accept the firmware risk.
+
+The cited community package is `hipserv2_seagateplug_2.72_admin.zip`; it is third-party firmware, is not distributed here, and its licensing/provenance is uncertain. The original procedure is described by [GoFlex Home blog](http://goflexhome.blogspot.com/2019/01/firmware-reflash-without-seagateshare.html). The critical recovery detail was documented in a [BeyondLogic archived boot log](https://web.archive.org/web/2020id_/https://wiki.beyondlogic.org/index.php/Seagate_FreeAgent_GoFlex_Home_Firmare_Recovery).
+
+1. Confirm the exact GoFlex board and package compatibility. Verify the downloaded archive and the firmware components' formats/checksums using trusted tools and instructions.
+2. Power the NAS off and remove the internal SATA disk from the dock. The recovery boot process may otherwise mistake the disk for the USB drive (`/dev/sda`) and fail to find the recovery image. Removing the disk also keeps it out of the firmware-writing path.
+3. Prepare the FAT32 recovery USB exactly as required by the package's source instructions.
+4. Insert the USB drive. Hold the reset pin while powering on to enter recovery mode.
+5. Allow several minutes for both bootloader and firmware stages to finish. Do not interrupt power while writing is in progress.
+6. Power off, reinstall the SATA disk, and boot normally. Confirm network connectivity and SMB access; an LED alone is not sufficient verification.
+
+The package used in the documented recovery created an `admin` account. Treat any bundled/default credential as temporary, use it only over the isolated link, and change it through a supported, verified method if available. Do not reuse it elsewhere.
+
+## 4. Do not rely on the legacy web interface
+
+The original web interface depends on old Flash-era components and redirects through the discontinued cloud service. A read-only inspection on 2026-10-02 found Apache 2.2.3 and OpenSSL 0.9.8b-era TLS, an expired self-issued certificate, and compatibility failures with modern clients. A modern client could negotiate only after legacy TLS options and received a weak 1024-bit DHE key with MD5-SHA1.
+
+The proposed embedded management UI was stopped before implementation. Authentication independence, reboot-safe storage ordering, and a safe allowlisted account/share operation path were not proven. Do not put a management UI on shared LAN HTTP or the NAS's legacy HTTPS endpoint. The bounded ARMv5 proxy feasibility investigation also stopped; the supported kernel baseline was newer than this device's Linux 2.6.22.18 kernel.
+
+## Repository contents
+
+- `scripts/catcher.py` — HTTP request catcher used in the lab investigation.
+- `scripts/dnsmasq_goflex.conf.example` — example DHCP/DNS configuration; adapt interface and addresses before use.
+- `scripts/mitm-setup-notes.md` — historical MITM, TLS, and observation notes. Commands there are not blanket authorization to change a host or device.
+
+## References
+
+- [Seagate GoFlex Home LED functionality](https://www.seagate.com/support/kb/goflex-home-led-functionality-3205en/)
+- [Seagate remote-access discontinuation notice](https://www.seagate.com/support/kb/what-to-know-about-goflex-home-and-the-discontinuation-of-remote-access-007867en/)
+- [Community firmware reflash procedure](http://goflexhome.blogspot.com/2019/01/firmware-reflash-without-seagateshare.html)
+- [BeyondLogic archived recovery boot log](https://web.archive.org/web/2020id_/https://wiki.beyondlogic.org/index.php/Seagate_FreeAgent_GoFlex_Home_Firmare_Recovery)
+- [OpenStora project](https://github.com/Dees7/openstora) — reference for the local sign-in route investigation.
+
+Firmware files are not included in this repository because their provenance and redistribution rights are uncertain. This guide is for authorized recovery and reuse of your own device only.
