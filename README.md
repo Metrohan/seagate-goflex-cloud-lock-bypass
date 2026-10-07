@@ -7,9 +7,16 @@ sonlandırılmış olduğu bir durumda elimize ulaştı. Tüm işlemler cihazın
 sahibinin izniyle, kendi donanımımız üzerinde, izole bir noktadan-noktaya
 Ethernet bağlantısıyla yapıldı.
 
-**Durum:** Kısmen başarılı. Cihaz reflash edilerek dosya paylaşımı (FTP/SMB) erişimi
-geri kazanıldı. Web arayüzü/SSH erişimi ve bulut kaydı simülasyonu kısmen ilerletildi
-ama tam olarak tamamlanmadı — aşağıda detaylandırılmıştır.
+**Son durum (2026-10-02):** Cihaz üzerinde salt okunur yönetim arayüzü yetenek incelemesi
+**NO-GO** ile durduruldu. Eski HTTPS yığını güncel istemcilerle uyumlu değil; bağımsız
+kimlik doğrulama, yeniden başlatma sonrası uygulama depolaması ve web sürecine verilebilecek
+dar yetkili işlem yolu kanıtlanmadı. Cihaza bu incelemede dosya, hesap, paylaşım, servis veya
+ayar yazılmadı. Karar, bakımı yapılan TLS özellikli bir sunucu sağlanana kadar standart SMB
+kullanımına devam etmek. Ayrıntı ve kanıt: [2026-10-02 yetenek kapısı](docs/superpowers/evidence/2026-10-02-goflex-ui-capability-gate.md).
+
+Daha önce cihaz yeniden flaşlanarak FTP/SMB dosya erişimi geri kazanıldı. Eski bulut kaydını
+taklit etme ve yönetim arayüzü çalışmaları tamamlanmış özellikler değildir. Cihazın bugünkü
+canlı durumu bu depodaki kayıtlarla doğrulanmış sayılmaz.
 
 ---
 
@@ -74,9 +81,9 @@ Bu düzeltmeyle **4. deneme başarılı oldu**: sabit yeşil LED (= "ağ bağlan
 normal", resmi [Seagate LED tablosu](https://www.seagate.com/support/kb/goflex-home-led-functionality-3205en/)),
 `admin`/`admin1` ile FTP ve SMB erişimi doğrulandı.
 
-## 4. Mevcut, doğrulanmış durum
+## 4. Reflash sonrası doğrulanmış durum (önceki gözlem)
 
-- ✅ Cihaz ağda stabil, canlı.
+- ✅ Önceki gözlemde cihaz ağda erişilebilir ve stabil durumdaydı; bu kayıt güncel canlılık kontrolü değildir.
 - ✅ `admin` / `admin1` ile FTP ve SMB üzerinden dosya erişimi çalışıyor.
 - ✅ Dahili disk mount olmuş, tüm orijinal paylaşımlar (Personal/Backup/Public/
   External) SMB üzerinden listeleniyor.
