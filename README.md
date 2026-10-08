@@ -1,6 +1,8 @@
-# Seagate GoFlex Home Recovery Manual
+> **Project Status: Recovery Incomplete**
+>
+> An evidence-based field report and recovery manual for one authorized Seagate GoFlex Home. Indexed media was readable over DLNA/HTTP; full-disk recovery and SSH access through the later RSA-key initrd attempt were not established.
 
-> **Project status: field report, recovery incomplete.** This repository documents one authorized GoFlex Home investigation. It is useful as a recovery case study and lab reference; it is not a turnkey recovery image or a promise that all old files can be restored. Basic FTP/SMB services returned after firmware recovery, and indexed media files were readable through DLNA/HTTP. A later RSA-key initrd recovery attempt did not restore expected services or establish SSH access.
+# Seagate GoFlex Home Recovery Manual
 
 ## Start here
 
