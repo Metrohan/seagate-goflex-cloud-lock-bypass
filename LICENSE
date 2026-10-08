@@ -22,7 +22,7 @@ SOFTWARE.
 
 ---
 
-Note: this license applies only to the original content of this repository
-(this README and the scripts/ directory). It does not apply to, and does not
-grant any rights over, third-party firmware, tools, or other material
-referenced but not included here (see README §7 for provenance).
+Note: this license applies only to original content authored for this
+repository, including its documentation and scripts. It does not apply to, and
+does not grant any rights over, third-party firmware, tools, or other material
+referenced but not included here (see README §8 for provenance).

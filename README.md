@@ -1,8 +1,32 @@
 # Seagate GoFlex Home Recovery Manual
 
+> **Project status: field report, recovery incomplete.** This repository documents one authorized GoFlex Home investigation. It is useful as a recovery case study and lab reference; it is not a turnkey recovery image or a promise that old files can be restored. The visible shares did not expose the old user data, and the later physical USB recovery attempt did not restore expected services.
+
+## Start here
+
+| Your goal | Start with | What this repo establishes |
+|---|---|---|
+| Read files from a working GoFlex Home | [Safe starting procedure](#2-safe-starting-procedure) | A previously observed SMB/FTP access path; old data recovery remains unproven |
+| Understand the retired setup dependency | [What happened](#1-what-happened) and [TLS investigation](#4-isolated-cloudtls-investigation) | Observed endpoint shapes and lab experiments, not a replacement cloud service |
+| Run the request-catcher unit/integration harness | [Harness README](scripts/reg-catcher-test/README.md) | Synthetic loopback tests only; requires local certificates and an obsolete Debian 8 image |
+| Reproduce the firmware recovery | [Firmware recovery notes](#3-firmware-recovery-what-was-learned) | Historical third-party procedure and device-specific observations; no firmware is distributed |
+
+## Tested environment and limits
+
+| Item | Recorded evidence |
+|---|---|
+| Device | Seagate GoFlex Home; exact hardware revision/label was not recorded in the published evidence |
+| Firmware | Community package identified as `hipserv2_seagateplug_2.72_admin.zip`; exact installed build after recovery was not independently recorded |
+| Device kernel | Linux 2.6.22.18, observed during the read-only capability review |
+| Host/test environment | Debian Jessie/OpenSSL 1.0.1 was used for legacy TLS investigation; the isolated catcher harness is Docker-based |
+| Verified outcomes | Basic FTP/SMB reachability after firmware recovery; synthetic catcher tests passed in the recorded run |
+| Not verified | Restoration of old user files, successful completion of account registration, or recovery of expected services after the later USB image attempt |
+
+Do not infer compatibility with another GoFlex hardware revision, firmware package, or disk layout from this single case. Unknown values are intentionally marked unknown instead of guessed.
+
 This repository records a cautious recovery effort for a Seagate GoFlex Home running Axentra HipServ. Seagate discontinued GoFlex Home remote access effective **December 31, 2018**. Seagate said local-network features and on-device data should remain, but a later reset/setup flow may still depend on the retired service. This effort addressed that specific locked setup state; it does not imply that every GoFlex Home requires a firmware reflash.
 
-The work was performed on an authorized device over a directly connected, isolated lab network. This manual distinguishes **what was observed**, **what worked**, and **what remains unproven**. It is a record of one device and firmware state, not a universal recipe.
+The work was performed on an authorized device over a directly connected, isolated lab network. This manual distinguishes **what was observed**, **what worked**, and **what remains unproven**. It is a record of one device with incomplete hardware/firmware identification, not a universal recipe.
 
 > **Current documented outcome (2026-10-02): recovery is incomplete.** FTP/SMB access was restored, but the old user data did not appear in the visible shares. A DLNA inventory was collected. A later USB recovery image passed offline checks, but after the physical recovery attempt the device did not return its expected services. Successful NAND recovery, SSH access, and access to the old data were not established. Use the verified SMB path while deciding whether to continue.
 
@@ -106,10 +130,12 @@ Do not expose the NAS's legacy web interface on a shared LAN. The 2026-10-02 cap
 
 ## 5. Scripts and repository files
 
+The repository contains two different kinds of tooling: historical lab helpers and a synthetic catcher test harness. **Only the catcher harness has a self-contained test entry point.** The other scripts are evidence from the original investigation and should not be treated as turnkey setup commands. Review [CONTRIBUTING.md](CONTRIBUTING.md) before proposing changes or sharing logs.
+
 | Path | Purpose | Boundary |
 |---|---|---|
 | [`scripts/dnsmasq_goflex.conf.example`](scripts/dnsmasq_goflex.conf.example) | Starting point for the isolated DHCP/DNS test network | Example only; inspect interface, subnet, and routing before use |
-| [`scripts/catcher.py`](scripts/catcher.py) | Earlier HTTP request catcher used during endpoint observation | Historical lab utility; inspect its redaction and bind address before running |
+| [`scripts/catcher.py`](scripts/catcher.py) | Earlier HTTP request catcher used during endpoint observation | Historical utility; no standalone public run procedure is claimed. Review bind address, logging, and redaction before any use |
 | [`scripts/mitm-setup-notes.md`](scripts/mitm-setup-notes.md) | Detailed chronology and commands for the legacy TLS/DNS/container investigation | Audit notes, not blanket permission to change the host or NAS |
 | [`scripts/reg-catcher-test/`](scripts/reg-catcher-test/) | Isolated Jessie/OpenSSL + `stunnel` + Python catcher test harness | Uses synthetic requests and loopback-only ports; it does not test the real NAS or prove API compatibility |
 | [`docs/superpowers/specs/2026-09-25-reg-catcher-test-design.md`](docs/superpowers/specs/2026-09-25-reg-catcher-test-design.md) | Design and security boundaries for the catcher test | Design record |
@@ -147,6 +173,8 @@ This builds a test-only image, publishes ports on `127.0.0.1`, sends synthetic H
 - Do not copy commands from the historical MITM notes into a live shell without checking each target and rollback.
 - Do not claim recovery success based on LEDs, a TLS handshake, a synthetic HTTP `200`, a DLNA listing, or a disk-usage value. Verify login, a representative file copy, checksums, and behavior after a normal reboot.
 - Firmware files are omitted because their source and redistribution rights are uncertain.
+- The repository uses the [MIT License](LICENSE) for its original documentation and scripts; third-party firmware, tools, and referenced material remain under their own terms.
+- See [CONTRIBUTING.md](CONTRIBUTING.md) for evidence, safety, and documentation expectations when proposing changes.
 
 ## 8. References
 
