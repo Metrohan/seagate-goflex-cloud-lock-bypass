@@ -1,0 +1,17 @@
+# Makineye özel, üretilen dosyalar - kaynak repo'ya girmemeli
+scripts/*.local
+scripts/dnsmasq.leases
+scripts/dnsmasq.pid
+scripts/dnsmasq.log
+scripts/requests.log
+scripts/*.log
+scripts/reg-catcher-test/__pycache__/
+**/__pycache__/
+*.py[cod]
+# Root-level runtime artifacts
+/dnsmasq.leases
+/dnsmasq.pid
+/dnsmasq.log
+/requests.log
+/cert.pem
+/key.pem
