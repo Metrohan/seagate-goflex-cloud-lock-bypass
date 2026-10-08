@@ -1,12 +1,12 @@
 # Seagate GoFlex Home Recovery Manual
 
-> **Project status: field report, recovery incomplete.** This repository documents one authorized GoFlex Home investigation. It is useful as a recovery case study and lab reference; it is not a turnkey recovery image or a promise that old files can be restored. The visible shares did not expose the old user data, and the later physical USB recovery attempt did not restore expected services.
+> **Project status: field report, recovery incomplete.** This repository documents one authorized GoFlex Home investigation. It is useful as a recovery case study and lab reference; it is not a turnkey recovery image or a promise that all old files can be restored. Basic FTP/SMB services returned after firmware recovery, and indexed media files were readable through DLNA/HTTP. A later RSA-key initrd recovery attempt did not restore expected services or establish SSH access.
 
 ## Start here
 
 | Your goal | Start with | What this repo establishes |
 |---|---|---|
-| Read files from a working GoFlex Home | [Safe starting procedure](#2-safe-starting-procedure) | A previously observed SMB/FTP access path; old data recovery remains unproven |
+| Read available files/media | [Safe starting procedure](#2-safe-starting-procedure) | Indexed media was readable over DLNA/HTTP; the visible SMB `Personal` share was empty and full-disk recovery remains unproven |
 | Understand the retired setup dependency | [What happened](#1-what-happened) and [TLS investigation](#4-isolated-cloudtls-investigation) | Observed endpoint shapes and lab experiments, not a replacement cloud service |
 | Run the request-catcher unit/integration harness | [Harness README](scripts/reg-catcher-test/README.md) | Synthetic loopback tests only; requires local certificates and an obsolete Debian 8 image |
 | Reproduce the firmware recovery | [Firmware recovery notes](#3-firmware-recovery-what-was-learned) | Historical third-party procedure and device-specific observations; no firmware is distributed |
@@ -19,8 +19,8 @@
 | Firmware | Community package identified as `hipserv2_seagateplug_2.72_admin.zip`; exact installed build after recovery was not independently recorded |
 | Device kernel | Linux 2.6.22.18, observed during the read-only capability review |
 | Host/test environment | Debian Jessie/OpenSSL 1.0.1 was used for legacy TLS investigation; the isolated catcher harness is Docker-based |
-| Verified outcomes | Basic FTP/SMB reachability after firmware recovery; synthetic catcher tests passed in the recorded run |
-| Not verified | Restoration of old user files, successful completion of account registration, or recovery of expected services after the later USB image attempt |
+| Verified outcomes | Basic FTP/SMB reachability; a DLNA inventory of 525 objects/467 files; 144 URL-deduplicated video resources (~867.7 GB) with HTTP byte-range content access; synthetic catcher tests passed in the recorded run |
+| Not verified | Full-disk recovery or copying all indexed media; successful completion of account registration; SSH login using the modified initrd; recovery of expected services after the later USB image attempt |
 
 Do not infer compatibility with another GoFlex hardware revision, firmware package, or disk layout from this single case. Unknown values are intentionally marked unknown instead of guessed.
 
@@ -28,7 +28,7 @@ This repository records a cautious recovery effort for a Seagate GoFlex Home run
 
 The work was performed on an authorized device over a directly connected, isolated lab network. This manual distinguishes **what was observed**, **what worked**, and **what remains unproven**. It is a record of one device with incomplete hardware/firmware identification, not a universal recipe.
 
-> **Current documented outcome (2026-10-02): recovery is incomplete.** FTP/SMB access was restored, but the old user data did not appear in the visible shares. A DLNA inventory was collected. A later USB recovery image passed offline checks, but after the physical recovery attempt the device did not return its expected services. Successful NAND recovery, SSH access, and access to the old data were not established. Use the verified SMB path while deciding whether to continue.
+> **Current documented outcome (2026-10-02): partial file access, recovery incomplete.** Firmware recovery restored basic FTP/SMB services, but the visible `Personal` share was empty. Separately, DLNA exposed an indexed media catalog and HTTP range requests returned media content, so some files were readable without SSH. We later prepared an RSA-key recovery initrd and attempted USB recovery; the device did not return its expected services, and SSH login through that key was not established. This is partial access to indexed media, not full-disk recovery.
 
 ## 1. What happened
 
@@ -62,7 +62,9 @@ The static `s_server -HTTP` response was useful for `/cpestatus`, but it could n
 
 ### Data recovery and management-UI decision
 
-A read-only DLNA `ContentDirectory` inventory was collected and accepted as a bounded result; it did not change the NAS flash or disk. The later USB `initrd` attempt used an RSA key format compatible with the device's old OpenSSH, and the image was checked offline for filesystem consistency, U-Boot CRC, payload identity, and checksum before being placed on the USB drive. The physical attempt did not bring the expected services back, so the result is **unverified**, not a successful recovery.
+The first useful file-content access came through DLNA, not through the MITM or SSH. A read-only `ContentDirectory` inventory found 525 objects (467 files); after URL deduplication, 144 video resources represented about 867.7 GB. HTTP byte-range requests returned media content, demonstrating read access to indexed media. This did not recover or copy the full disk, and the SMB `Personal` share remained empty.
+
+Separately, the device advertised `OpenSSH_4.3-HipServ`, which cannot use Ed25519 keys. We replaced the recovery key in a custom initrd with an RSA-compatible key and checked the image offline for filesystem consistency, U-Boot CRC, payload identity, and checksum before placing it on USB. The physical recovery attempt did not bring the expected services back; SSH access through the modified key was **not verified**. Treat this as a failed/unconfirmed recovery attempt, not the way file access was achieved.
 
 A proposed embedded management UI was stopped at a read-only capability gate. The NAS has an expired self-issued certificate and obsolete TLS, independent authentication was not established, reboot-safe application storage ordering was unknown, and no narrow privilege boundary for account/share changes was proven. A bounded ARMv5 proxy investigation also stopped because the device's Linux 2.6.22.18 kernel falls below the supported kernel baseline of current Go releases. The safe direction recorded in the project is ordinary SMB access and a maintained LAN-side TLS-capable host before reconsidering a UI.
 
@@ -158,12 +160,14 @@ This builds a test-only image, publishes ports on `127.0.0.1`, sends synthetic H
 |---|---|
 | The retired cloud service is a blocker for the original setup flow | Observed/documented |
 | Firmware recovery restored basic FTP/SMB reachability | Previously observed on this device |
-| The visible `Personal` share contained the old user files | Not observed |
-| The disk's used-space figure means files are recoverable | Not proven |
+| The visible `Personal` share contained the old user files | Not observed; it listed only `.` and `..` |
+| Indexed media files were readable through DLNA/HTTP | Observed for a subset; 144 URL-deduplicated video resources were inventoried, and HTTP range content was returned |
+| All indexed files or the full disk were copied/recovered | Not proven |
+| The disk's used-space figure means all files are recoverable | Not proven |
 | The isolated TLS catcher can accept synthetic HTTP/HTTPS tests and redact test secrets | Verified in the recorded test run |
 | A synthetic XML response matches the real Seagate/Axentra registration schema | Not proven |
 | The local account-registration sequence is fully emulated | Not proven |
-| The later USB recovery attempt restored the device's services | Not proven |
+| The later USB/RSA-key initrd recovery attempt restored SSH or the expected services | Not proven |
 | The embedded management UI has safe authentication, TLS, storage ordering, and privilege boundaries | No-go; requirements were not established |
 
 ## 7. Handling and contribution rules
